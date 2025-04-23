@@ -24,7 +24,7 @@ jest.mock("next-auth/react", () => ({
         id: "test-user-id",
         name: "Test User",
         email: "test@example.com",
-        role: "developer",
+        role: "DEVELOPER",
       },
     },
     status: "authenticated",

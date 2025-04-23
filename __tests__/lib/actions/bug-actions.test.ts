@@ -1,16 +1,27 @@
 import { createBug, updateBug, addComment } from "@/lib/actions/bug-actions"
-import { supabase } from "@/lib/supabase/client"
+import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { getServerSession } from "next-auth"
 
 // Mock the modules
-jest.mock("@/lib/supabase/client", () => ({
-  supabase: {
-    from: jest.fn().mockReturnThis(),
-    insert: jest.fn().mockReturnThis(),
-    update: jest.fn().mockReturnThis(),
-    select: jest.fn().mockReturnThis(),
-    eq: jest.fn().mockReturnThis(),
-    single: jest.fn(),
+jest.mock("@/lib/prisma", () => ({
+  prisma: {
+    bug: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    bugActivity: {
+      create: jest.fn(),
+      createMany: jest.fn(),
+    },
+    bugComment: {
+      create: jest.fn(),
+    },
+    user: {
+      findUnique: jest.fn(),
+    },
+    $transaction: jest.fn((callback) => callback(prisma)),
   },
 }))
 
@@ -19,54 +30,21 @@ jest.mock("next/cache", () => ({
 }))
 
 jest.mock("next-auth", () => ({
-  getServerSession: jest.fn(() =>
-    Promise.resolve({
-      user: {
-        id: "user-123",
-        email: "test@example.com",
-        name: "Test User",
-      },
-    }),
-  ),
+  getServerSession: jest.fn(),
 }))
 
 describe("Bug Actions", () => {
-  const mockFrom = supabase.from as jest.Mock
-  const mockInsert = jest.fn()
-  const mockUpdate = jest.fn()
-  const mockSelect = jest.fn()
-  const mockEq = jest.fn()
-  const mockSingle = jest.fn()
-  const mockRevalidatePath = revalidatePath as jest.Mock
+  const mockSession = {
+    user: {
+      id: "user-123",
+      email: "test@example.com",
+      name: "Test User",
+    },
+  }
 
   beforeEach(() => {
-    mockFrom.mockReturnValue({
-      insert: mockInsert,
-      update: mockUpdate,
-      select: mockSelect,
-      eq: mockEq,
-      single: mockSingle,
-    })
-
-    mockInsert.mockReturnValue({
-      select: mockSelect,
-    })
-
-    mockUpdate.mockReturnValue({
-      eq: mockEq,
-    })
-
-    mockSelect.mockReturnValue({
-      eq: mockEq,
-      single: mockSingle,
-    })
-
-    mockEq.mockReturnValue({
-      select: mockSelect,
-      single: mockSingle,
-    })
-
-    mockRevalidatePath.mockReset()
+    jest.clearAllMocks()
+    ;(getServerSession as jest.Mock).mockResolvedValue(mockSession)
   })
 
   describe("createBug", () => {
@@ -76,38 +54,44 @@ describe("Bug Actions", () => {
         title: "Test Bug",
         description: "Test Description",
       }
-
-      mockSingle.mockResolvedValueOnce({
-        data: mockBug,
-        error: null,
-      })
-
-      mockSingle.mockResolvedValueOnce({
-        data: null,
-        error: null,
-      })
+      ;(prisma.bug.create as jest.Mock).mockResolvedValue(mockBug)
+      ;(prisma.bugActivity.create as jest.Mock).mockResolvedValue({})
 
       const result = await createBug({
         title: "Test Bug",
         description: "Test Description",
         project_id: "project-1",
-        priority: "high",
-        severity: "major",
+        priority: "HIGH",
+        severity: "MAJOR",
       })
 
-      expect(mockFrom).toHaveBeenCalledWith("bugs")
-      expect(mockInsert).toHaveBeenCalledWith({
-        title: "Test Bug",
-        description: "Test Description",
-        project_id: "project-1",
-        status: "open",
-        priority: "high",
-        severity: "major",
-        reporter_id: "user-123",
-        assignee_id: null,
-        steps_to_reproduce: null,
-        tags: [],
+      expect(prisma.bug.create).toHaveBeenCalledWith({
+        data: {
+          title: "Test Bug",
+          description: "Test Description",
+          projectId: "project-1",
+          status: "OPEN",
+          priority: "HIGH",
+          severity: "MAJOR",
+          reporterId: "user-123",
+          assigneeId: null,
+          stepsToReproduce: null,
+          tags: [],
+        },
       })
+
+      expect(prisma.bugActivity.create).toHaveBeenCalledWith({
+        data: {
+          bugId: "bug-123",
+          userId: "user-123",
+          action: "created",
+          details: "this bug",
+        },
+      })
+
+      expect(revalidatePath).toHaveBeenCalledWith("/bugs")
+      expect(revalidatePath).toHaveBeenCalledWith("/projects/project-1")
+
       expect(result).toEqual({ bug: mockBug })
     })
 
@@ -116,11 +100,27 @@ describe("Bug Actions", () => {
         title: "",
         description: "Test Description",
         project_id: "project-1",
-        priority: "high",
-        severity: "major",
+        priority: "HIGH",
+        severity: "MAJOR",
       })
 
       expect(result).toEqual({ error: "Title, description, and project are required" })
+      expect(prisma.bug.create).not.toHaveBeenCalled()
+    })
+
+    it("returns an error if user is not authenticated", async () => {
+      ;(getServerSession as jest.Mock).mockResolvedValue(null)
+
+      const result = await createBug({
+        title: "Test Bug",
+        description: "Test Description",
+        project_id: "project-1",
+        priority: "HIGH",
+        severity: "MAJOR",
+      })
+
+      expect(result).toEqual({ error: "Unauthorized" })
+      expect(prisma.bug.create).not.toHaveBeenCalled()
     })
   })
 
@@ -128,37 +128,67 @@ describe("Bug Actions", () => {
     it("updates an existing bug", async () => {
       const mockBug = {
         id: "bug-123",
-        status: "in_progress",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        severity: "MAJOR",
+        projectId: "project-1",
       }
-
-      mockSingle.mockResolvedValueOnce({
-        data: { status: "open" },
-        error: null,
+      ;(prisma.bug.findUnique as jest.Mock).mockResolvedValue({
+        id: "bug-123",
+        status: "OPEN",
+        priority: "MEDIUM",
+        severity: "MINOR",
       })
-
-      mockSingle.mockResolvedValueOnce({
-        data: mockBug,
-        error: null,
-      })
-
-      mockSingle.mockResolvedValueOnce({
-        data: null,
-        error: null,
-      })
+      ;(prisma.bug.update as jest.Mock).mockResolvedValue(mockBug)
+      ;(prisma.bugActivity.createMany as jest.Mock).mockResolvedValue({})
 
       const result = await updateBug({
         id: "bug-123",
-        status: "in_progress",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        severity: "MAJOR",
       })
 
-      expect(mockFrom).toHaveBeenCalledWith("bugs")
-      expect(mockUpdate).toHaveBeenCalledWith({
-        status: "in_progress",
-        updated_at: expect.any(String),
+      expect(prisma.bug.findUnique).toHaveBeenCalledWith({
+        where: { id: "bug-123" },
       })
-      expect(mockEq).toHaveBeenCalledWith("id", "bug-123")
-      expect(mockRevalidatePath).toHaveBeenCalledWith("/bugs/bug-123")
-      expect(mockRevalidatePath).toHaveBeenCalledWith("/bugs")
+
+      expect(prisma.bug.update).toHaveBeenCalledWith({
+        where: { id: "bug-123" },
+        data: {
+          status: "IN_PROGRESS",
+          priority: "HIGH",
+          severity: "MAJOR",
+        },
+      })
+
+      expect(prisma.bugActivity.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            bugId: "bug-123",
+            userId: "user-123",
+            action: "changed status",
+            details: "from OPEN to IN_PROGRESS",
+          },
+          {
+            bugId: "bug-123",
+            userId: "user-123",
+            action: "updated priority",
+            details: "to HIGH",
+          },
+          {
+            bugId: "bug-123",
+            userId: "user-123",
+            action: "updated severity",
+            details: "to MAJOR",
+          },
+        ],
+      })
+
+      expect(revalidatePath).toHaveBeenCalledWith("/bugs/bug-123")
+      expect(revalidatePath).toHaveBeenCalledWith("/bugs")
+      expect(revalidatePath).toHaveBeenCalledWith("/projects/project-1")
+
       expect(result).toEqual({ bug: mockBug })
     })
   })
@@ -168,27 +198,46 @@ describe("Bug Actions", () => {
       const mockComment = {
         id: "comment-1",
         content: "Test Comment",
+        user: {
+          id: "user-123",
+          firstName: "Test",
+          lastName: "User",
+        },
       }
-
-      mockSingle.mockResolvedValueOnce({
-        data: mockComment,
-        error: null,
-      })
-
-      mockSingle.mockResolvedValueOnce({
-        data: null,
-        error: null,
-      })
+      ;(prisma.bugComment.create as jest.Mock).mockResolvedValue(mockComment)
+      ;(prisma.bugActivity.create as jest.Mock).mockResolvedValue({})
 
       const result = await addComment("bug-123", "Test Comment")
 
-      expect(mockFrom).toHaveBeenCalledWith("bug_comments")
-      expect(mockInsert).toHaveBeenCalledWith({
-        bug_id: "bug-123",
-        user_id: "user-123",
-        content: "Test Comment",
+      expect(prisma.bugComment.create).toHaveBeenCalledWith({
+        data: {
+          bugId: "bug-123",
+          userId: "user-123",
+          content: "Test Comment",
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatarUrl: true,
+            },
+          },
+        },
       })
-      expect(mockRevalidatePath).toHaveBeenCalledWith("/bugs/bug-123")
+
+      expect(prisma.bugActivity.create).toHaveBeenCalledWith({
+        data: {
+          bugId: "bug-123",
+          userId: "user-123",
+          action: "added comment",
+          details: "Test Comment",
+        },
+      })
+
+      expect(revalidatePath).toHaveBeenCalledWith("/bugs/bug-123")
+
       expect(result).toEqual({ comment: mockComment })
     })
 
@@ -196,6 +245,7 @@ describe("Bug Actions", () => {
       const result = await addComment("bug-123", "")
 
       expect(result).toEqual({ error: "Comment content is required" })
+      expect(prisma.bugComment.create).not.toHaveBeenCalled()
     })
   })
 })

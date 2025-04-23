@@ -18,7 +18,8 @@ A comprehensive bug tracking system for software development teams.
 - Tailwind CSS
 - shadcn/ui components
 - NextAuth.js for authentication
-- Supabase for database
+- Prisma ORM
+- PostgreSQL database
 - Jest for testing
 
 ## Getting Started
@@ -26,7 +27,7 @@ A comprehensive bug tracking system for software development teams.
 ### Prerequisites
 
 - Node.js 18+ and npm
-- PostgreSQL database (local or Supabase)
+- PostgreSQL database (local)
 
 ### Environment Variables
 
@@ -34,30 +35,9 @@ Create a `.env.local` file in the root directory with the following variables:
 
 \`\`\`
 # Database
-DATABASE_URL="postgresql://postgres:password@localhost:5432/bug_tracker"
-POSTGRES_URL="postgresql://postgres:password@localhost:5432/bug_tracker"
-POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5432/bug_tracker"
-POSTGRES_URL_NON_POOLING="postgresql://postgres:password@localhost:5432/bug_tracker"
-POSTGRES_USER="postgres"
-POSTGRES_PASSWORD="password"
-POSTGRES_HOST="localhost"
-POSTGRES_DATABASE="bug_tracker"
-
-# Supabase
-SUPABASE_URL="your-supabase-url"
-NEXT_PUBLIC_SUPABASE_URL="your-supabase-url"
-SUPABASE_ANON_KEY="your-supabase-anon-key"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
-SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
-SUPABASE_JWT_SECRET="your-supabase-jwt-secret"
-
-# NextAuth
+DATABASE_URL="postgresql://postgres:19948miko@localhost:5432/bug_tracker"
+NEXTAUTH_SECRET="1234567890"
 NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-nextauth-secret"
-
-# Google OAuth (optional)
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
 \`\`\`
 
 ### Installation
@@ -67,15 +47,23 @@ GOOGLE_CLIENT_SECRET="your-google-client-secret"
    \`\`\`bash
    npm install
    \`\`\`
-3. Set up the database:
+3. Generate Prisma client:
    \`\`\`bash
-   npm run setup-db
+   npx prisma generate
    \`\`\`
-4. Run the development server:
+4. Push the schema to the database:
+   \`\`\`bash
+   npx prisma db push
+   \`\`\`
+5. Seed the database:
+   \`\`\`bash
+   npm run db:seed
+   \`\`\`
+6. Run the development server:
    \`\`\`bash
    npm run dev
    \`\`\`
-5. Open [http://localhost:3000](http://localhost:3000) in your browser
+7. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 ### Testing
 
@@ -89,14 +77,17 @@ Run tests with coverage:
 npm run test:coverage
 \`\`\`
 
-## Deployment
+## Default Users
 
-The application can be deployed to Vercel:
+After seeding the database, you can log in with the following credentials:
 
-1. Push your code to a GitHub repository
-2. Import the repository in Vercel
-3. Configure the environment variables
-4. Deploy
+- Admin User:
+  - Email: admin@example.com
+  - Password: admin123
+
+- Developer User:
+  - Email: dev@example.com
+  - Password: dev123
 
 ## License
 

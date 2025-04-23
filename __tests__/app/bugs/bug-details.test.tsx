@@ -1,10 +1,12 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import BugDetailPage from "@/app/bugs/[id]/page"
 import { updateBug, addComment } from "@/lib/actions/bug-actions"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock the modules
 jest.mock("next/navigation")
 jest.mock("@/lib/actions/bug-actions")
+jest.mock("@/hooks/use-toast")
 
 // Mock fetch for bug details
 global.fetch = jest.fn(() =>
@@ -16,18 +18,19 @@ global.fetch = jest.fn(() =>
           id: "bug-123",
           title: "Login button not working",
           description: "The login button does not respond when clicked.",
-          status: "open",
-          priority: "high",
-          severity: "major",
-          created_at: "2023-01-01T00:00:00.000Z",
-          updated_at: "2023-01-01T00:00:00.000Z",
+          status: "OPEN",
+          priority: "HIGH",
+          severity: "MAJOR",
+          createdAt: "2023-01-01T00:00:00.000Z",
+          updatedAt: "2023-01-01T00:00:00.000Z",
           reporter: {
-            first_name: "John",
-            last_name: "Doe",
-            avatar_url: null,
+            id: "user-1",
+            firstName: "John",
+            lastName: "Doe",
+            avatarUrl: null,
           },
           assignee: null,
-          projects: {
+          project: {
             id: "project-1",
             name: "E-commerce Platform",
           },
@@ -43,10 +46,14 @@ global.fetch = jest.fn(() =>
 describe("Bug Details Page", () => {
   const mockUpdateBug = updateBug as jest.Mock
   const mockAddComment = addComment as jest.Mock
+  const mockToast = jest.fn()
 
   beforeEach(() => {
     mockUpdateBug.mockReset()
     mockAddComment.mockReset()
+    ;(useToast as jest.Mock).mockReturnValue({
+      toast: mockToast,
+    })
   })
 
   it("renders the bug details", async () => {
@@ -63,7 +70,7 @@ describe("Bug Details Page", () => {
     expect(screen.getByText("John Doe")).toBeInTheDocument()
 
     // Check for status and priority
-    expect(screen.getByText("High / Major")).toBeInTheDocument()
+    expect(screen.getByText("HIGH / MAJOR")).toBeInTheDocument()
 
     // Check for tags
     expect(screen.getByText("login")).toBeInTheDocument()
@@ -74,7 +81,7 @@ describe("Bug Details Page", () => {
     mockUpdateBug.mockResolvedValue({
       bug: {
         id: "bug-123",
-        status: "in_progress",
+        status: "IN_PROGRESS",
       },
     })
 
@@ -96,11 +103,17 @@ describe("Bug Details Page", () => {
     await waitFor(() => {
       expect(mockUpdateBug).toHaveBeenCalledWith({
         id: "bug-123",
-        status: "in_progress",
-        priority: "high",
-        severity: "major",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        severity: "MAJOR",
         assignee_id: "",
       })
+    })
+
+    // Check if toast was called with success message
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "Bug updated",
+      description: "The bug has been updated successfully",
     })
   })
 
@@ -109,11 +122,11 @@ describe("Bug Details Page", () => {
       comment: {
         id: "comment-1",
         content: "This is a test comment",
-        created_at: "2023-01-01T00:00:00.000Z",
-        users: {
-          first_name: "John",
-          last_name: "Doe",
-          avatar_url: null,
+        createdAt: "2023-01-01T00:00:00.000Z",
+        user: {
+          firstName: "John",
+          lastName: "Doe",
+          avatarUrl: null,
         },
       },
     })
@@ -135,6 +148,12 @@ describe("Bug Details Page", () => {
     // Check if addComment was called with the correct arguments
     await waitFor(() => {
       expect(mockAddComment).toHaveBeenCalledWith("bug-123", "This is a test comment")
+    })
+
+    // Check if toast was called with success message
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "Comment added",
+      description: "Your comment has been added successfully",
     })
   })
 })

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { supabase } from "@/lib/supabase/client"
+import { prisma } from "@/lib/prisma"
+import { MemberRole } from "@prisma/client"
 
 type CreateProjectInput = {
   name: string
@@ -22,31 +23,28 @@ export async function createProject(input: CreateProjectInput) {
       return { error: "Project name is required" }
     }
 
-    // Create the project
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .insert({
-        name: input.name,
-        description: input.description || "",
-        created_by: session.user.id,
+    // Create the project and add the creator as a member in one transaction
+    const project = await prisma.$transaction(async (tx) => {
+      // Create the project
+      const newProject = await tx.project.create({
+        data: {
+          name: input.name,
+          description: input.description || "",
+          createdById: session.user.id,
+        },
       })
-      .select()
-      .single()
 
-    if (projectError) {
-      throw projectError
-    }
+      // Add the creator as a project member with owner role
+      await tx.projectMember.create({
+        data: {
+          projectId: newProject.id,
+          userId: session.user.id,
+          role: MemberRole.OWNER,
+        },
+      })
 
-    // Add the creator as a project member with owner role
-    const { error: memberError } = await supabase.from("project_members").insert({
-      project_id: project.id,
-      user_id: session.user.id,
-      role: "owner",
+      return newProject
     })
-
-    if (memberError) {
-      throw memberError
-    }
 
     revalidatePath("/projects")
 
@@ -60,7 +58,7 @@ export async function createProject(input: CreateProjectInput) {
 type AddProjectMemberInput = {
   projectId: string
   userId: string
-  role: "owner" | "member"
+  role: "OWNER" | "MEMBER"
 }
 
 export async function addProjectMember(input: AddProjectMemberInput) {
@@ -72,46 +70,38 @@ export async function addProjectMember(input: AddProjectMemberInput) {
 
   try {
     // Check if user is project owner
-    const { data: membership, error: membershipError } = await supabase
-      .from("project_members")
-      .select("role")
-      .eq("project_id", input.projectId)
-      .eq("user_id", session.user.id)
-      .single()
+    const membership = await prisma.projectMember.findFirst({
+      where: {
+        projectId: input.projectId,
+        userId: session.user.id,
+        role: MemberRole.OWNER,
+      },
+    })
 
-    if (membershipError) {
-      throw membershipError
-    }
-
-    if (membership.role !== "owner") {
+    if (!membership) {
       return { error: "Only project owners can add members" }
     }
 
     // Check if user is already a member
-    const { data: existingMember, error: existingMemberError } = await supabase
-      .from("project_members")
-      .select("id")
-      .eq("project_id", input.projectId)
-      .eq("user_id", input.userId)
+    const existingMember = await prisma.projectMember.findFirst({
+      where: {
+        projectId: input.projectId,
+        userId: input.userId,
+      },
+    })
 
-    if (existingMember && existingMember.length > 0) {
+    if (existingMember) {
       return { error: "User is already a member of this project" }
     }
 
     // Add the member
-    const { data: member, error: addMemberError } = await supabase
-      .from("project_members")
-      .insert({
-        project_id: input.projectId,
-        user_id: input.userId,
-        role: input.role,
-      })
-      .select()
-      .single()
-
-    if (addMemberError) {
-      throw addMemberError
-    }
+    const member = await prisma.projectMember.create({
+      data: {
+        projectId: input.projectId,
+        userId: input.userId,
+        role: input.role as MemberRole,
+      },
+    })
 
     revalidatePath(`/projects/${input.projectId}`)
 

@@ -7,34 +7,38 @@ describe("BugsList", () => {
       id: "BUG-1001",
       title: "Login page crashes on mobile devices",
       description: "When attempting to login on mobile devices, the page crashes after submitting credentials.",
-      status: "Open",
-      priority: "High",
-      severity: "Major",
-      project: "E-commerce Platform",
-      assignee: {
-        name: "John Doe",
-        avatar: "/placeholder.svg?height=32&width=32",
-        initials: "JD",
+      status: "OPEN",
+      priority: "HIGH",
+      severity: "MAJOR",
+      project: {
+        name: "E-commerce Platform",
       },
-      created: "2 days ago",
-      updated: "4 hours ago",
+      assignee: {
+        firstName: "John",
+        lastName: "Doe",
+        avatarUrl: "/placeholder.svg?height=32&width=32",
+      },
+      createdAt: "2023-01-01T00:00:00.000Z",
+      updatedAt: "2023-01-01T12:00:00.000Z",
       tags: ["mobile", "authentication", "crash"],
     },
     {
       id: "BUG-1002",
       title: "Payment processing error on checkout",
       description: "Users receive an error when attempting to complete payment during checkout process.",
-      status: "In Progress",
-      priority: "Critical",
-      severity: "Critical",
-      project: "E-commerce Platform",
-      assignee: {
-        name: "Sarah Kim",
-        avatar: "/placeholder.svg?height=32&width=32",
-        initials: "SK",
+      status: "IN_PROGRESS",
+      priority: "CRITICAL",
+      severity: "CRITICAL",
+      project: {
+        name: "E-commerce Platform",
       },
-      created: "3 days ago",
-      updated: "1 day ago",
+      assignee: {
+        firstName: "Sarah",
+        lastName: "Kim",
+        avatarUrl: "/placeholder.svg?height=32&width=32",
+      },
+      createdAt: "2023-01-02T00:00:00.000Z",
+      updatedAt: "2023-01-02T12:00:00.000Z",
       tags: ["payment", "checkout", "error"],
     },
   ]
@@ -51,8 +55,8 @@ describe("BugsList", () => {
     expect(screen.getByText("BUG-1002")).toBeInTheDocument()
 
     // Check if bug statuses are rendered
-    expect(screen.getByText("Open")).toBeInTheDocument()
-    expect(screen.getByText("In Progress")).toBeInTheDocument()
+    expect(screen.getByText("OPEN")).toBeInTheDocument()
+    expect(screen.getByText("IN_PROGRESS")).toBeInTheDocument()
 
     // Check if bug tags are rendered
     expect(screen.getByText("mobile")).toBeInTheDocument()

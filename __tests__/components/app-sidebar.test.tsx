@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { useSession } from "next-auth/react"
 
 // Mock the usePathname hook
 jest.mock("next/navigation", () => ({
@@ -7,7 +8,27 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
 }))
 
+// Mock the useSession hook
+jest.mock("next-auth/react", () => ({
+  useSession: jest.fn(),
+}))
+
 describe("AppSidebar", () => {
+  beforeEach(() => {
+    // Mock authenticated session
+    ;(useSession as jest.Mock).mockReturnValue({
+      data: {
+        user: {
+          name: "John Doe",
+          email: "john@example.com",
+          image: "/placeholder.svg",
+        },
+        expires: "1",
+      },
+      status: "authenticated",
+    })
+  })
+
   it("renders the sidebar with navigation links", () => {
     render(<AppSidebar />)
 

@@ -1,17 +1,21 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import LoginPage from "@/app/login/page"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock the modules
 jest.mock("next-auth/react")
 jest.mock("next/navigation")
+jest.mock("@/hooks/use-toast")
 
 describe("LoginPage", () => {
   const mockSignIn = signIn as jest.Mock
   const mockRouter = useRouter as jest.Mock
+  const mockSearchParams = useSearchParams as jest.Mock
   const mockPush = jest.fn()
   const mockRefresh = jest.fn()
+  const mockToast = jest.fn()
 
   beforeEach(() => {
     mockSignIn.mockReset()
@@ -19,6 +23,12 @@ describe("LoginPage", () => {
       push: mockPush,
       refresh: mockRefresh,
     }))
+    mockSearchParams.mockImplementation(() => ({
+      get: jest.fn().mockReturnValue("/dashboard"),
+    }))
+    ;(useToast as jest.Mock).mockReturnValue({
+      toast: mockToast,
+    })
   })
 
   it("renders the login form", () => {
@@ -62,27 +72,38 @@ describe("LoginPage", () => {
     // Check if router.push was called with the correct path
     expect(mockPush).toHaveBeenCalledWith("/dashboard")
     expect(mockRefresh).toHaveBeenCalled()
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "Success",
+      description: "Logged in successfully",
+    })
   })
 
   it("displays an error message when login fails", async () => {
     mockSignIn.mockResolvedValue({ error: "Invalid credentials" })
 
-    const { getByLabelText, getByRole } = render(<LoginPage />)
+    render(<LoginPage />)
 
     // Fill in the form
-    fireEvent.change(getByLabelText("Email"), {
+    fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "test@example.com" },
     })
-    fireEvent.change(getByLabelText("Password"), {
+    fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "wrongpassword" },
     })
 
     // Submit the form
-    fireEvent.click(getByRole("button", { name: "Sign in" }))
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
 
     // Check if signIn was called
     await waitFor(() => {
       expect(mockSignIn).toHaveBeenCalled()
+    })
+
+    // Check if toast was called with error message
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "Error",
+      description: "Invalid email or password",
+      variant: "destructive",
     })
 
     // Router should not be called on error

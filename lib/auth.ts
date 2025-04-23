@@ -1,13 +1,27 @@
 import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { supabase } from "./supabase/client"
+import { PrismaAdapter } from "@auth/prisma-adapter"
+import { prisma } from "./prisma"
+import { compare } from "bcrypt"
+import { UserRole } from "@prisma/client"
 
 export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      profile(profile) {
+        return {
+          id: profile.sub,
+          email: profile.email,
+          firstName: profile.given_name,
+          lastName: profile.family_name,
+          avatarUrl: profile.picture,
+          role: UserRole.DEVELOPER,
+        }
+      },
     }),
     CredentialsProvider({
       name: "Credentials",
@@ -21,34 +35,27 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: credentials.email,
-            password: credentials.password,
+          // Find user by email
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
           })
 
-          if (error || !data.user) {
-            console.error("Supabase auth error:", error)
+          if (!user) {
             return null
           }
 
-          // Get the user profile data
-          const { data: profileData, error: profileError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", data.user.id)
-            .single()
-
-          if (profileError || !profileData) {
-            console.error("Profile fetch error:", profileError)
+          // Check if password matches
+          const passwordMatch = await compare(credentials.password, user.password || "")
+          if (!passwordMatch) {
             return null
           }
 
           return {
-            id: data.user.id,
-            email: data.user.email,
-            name: `${profileData.first_name} ${profileData.last_name}`,
-            image: profileData.avatar_url,
-            role: profileData.role,
+            id: user.id,
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`,
+            image: user.avatarUrl,
+            role: user.role,
           }
         } catch (error) {
           console.error("Auth error:", error)

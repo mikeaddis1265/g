@@ -2,21 +2,27 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { useRouter } from "next/navigation"
 import RegisterPage from "@/app/register/page"
 import { createUser } from "@/lib/actions/user-actions"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock the modules
 jest.mock("next/navigation")
 jest.mock("@/lib/actions/user-actions")
+jest.mock("@/hooks/use-toast")
 
 describe("RegisterPage", () => {
   const mockRouter = useRouter as jest.Mock
   const mockPush = jest.fn()
   const mockCreateUser = createUser as jest.Mock
+  const mockToast = jest.fn()
 
   beforeEach(() => {
     mockRouter.mockImplementation(() => ({
       push: mockPush,
     }))
     mockCreateUser.mockReset()
+    ;(useToast as jest.Mock).mockReturnValue({
+      toast: mockToast,
+    })
   })
 
   it("renders the registration form", () => {
@@ -62,8 +68,14 @@ describe("RegisterPage", () => {
         lastName: "Doe",
         email: "john.doe@example.com",
         password: "password123",
-        role: "developer",
+        role: "DEVELOPER",
       })
+    })
+
+    // Check if toast was called with success message
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "Account created",
+      description: "Your account has been created successfully. You can now log in.",
     })
 
     // Check if router.push was called with the correct path
@@ -95,6 +107,13 @@ describe("RegisterPage", () => {
     // Check if createUser was called
     await waitFor(() => {
       expect(mockCreateUser).toHaveBeenCalled()
+    })
+
+    // Check if toast was called with error message
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "Error",
+      description: "Email already exists",
+      variant: "destructive",
     })
 
     // Router should not be called on error

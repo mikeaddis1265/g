@@ -60,13 +60,19 @@
     "zod": "^3.24.1",
     "@auth/core": "latest",
     "nodemailer": "latest",
+    "pg-native": "latest",
+    "prisma": "latest",
+    "@prisma/client": "latest",
     "@testing-library/dom": "latest",
-    "@supabase/supabase-js": "latest",
     "next-auth": "latest",
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
     "fs": "latest",
-    "path": "latest"
+    "path": "latest",
+    "pg": "latest",
+    "@supabase/supabase-js": "latest",
+    "@auth/prisma-adapter": "latest",
+    "bcryptjs": "latest",
+    "@testing-library/react": "latest",
+    "@testing-library/jest-dom": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

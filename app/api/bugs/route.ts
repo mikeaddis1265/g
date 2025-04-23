@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { supabase } from "@/lib/supabase/client"
+import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -19,60 +19,76 @@ export async function GET(request: NextRequest) {
   const sort = searchParams.get("sort") || "newest"
 
   try {
-    let query = supabase.from("bugs").select(`
-        *,
-        projects(name),
-        reporter:reporter_id(id, first_name, last_name, avatar_url),
-        assignee:assignee_id(id, first_name, last_name, avatar_url)
-      `)
+    // Build the where clause
+    const where: any = {}
 
-    // Apply filters
     if (projectId) {
-      query = query.eq("project_id", projectId)
+      where.projectId = projectId
     }
 
     if (status) {
-      query = query.eq("status", status)
+      where.status = status
     }
 
     if (priority) {
-      query = query.eq("priority", priority)
+      where.priority = priority
     }
 
     if (assigneeId) {
-      query = query.eq("assignee_id", assigneeId)
+      where.assigneeId = assigneeId
     }
 
     if (search) {
-      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+      ]
     }
 
-    // Apply sorting
+    // Build the orderBy clause
+    let orderBy: any = {}
+
     if (sort === "newest") {
-      query = query.order("created_at", { ascending: false })
+      orderBy = { createdAt: "desc" }
     } else if (sort === "oldest") {
-      query = query.order("created_at", { ascending: true })
+      orderBy = { createdAt: "asc" }
     } else if (sort === "priority") {
       // Custom priority order: critical, high, medium, low
-      query = query.order("priority", {
-        ascending: false,
-        nullsFirst: false,
-        foreignTable: null,
-      })
+      orderBy = { priority: "desc" }
     } else if (sort === "status") {
       // Custom status order: open, in_progress, testing, resolved, closed
-      query = query.order("status", {
-        ascending: true,
-        nullsFirst: false,
-        foreignTable: null,
-      })
+      orderBy = { status: "asc" }
     }
 
-    const { data: bugs, error } = await query
-
-    if (error) {
-      throw error
-    }
+    // Get bugs with related data
+    const bugs = await prisma.bug.findMany({
+      where,
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        reporter: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+        assignee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy,
+    })
 
     return NextResponse.json({ bugs })
   } catch (error) {
@@ -102,38 +118,30 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the bug
-    const { data: bug, error: bugError } = await supabase
-      .from("bugs")
-      .insert({
+    const bug = await prisma.bug.create({
+      data: {
         title,
         description,
-        steps_to_reproduce,
-        project_id,
-        status: "open",
-        priority: priority || "medium",
-        severity: severity || "minor",
-        reporter_id: session.user.id,
-        assignee_id,
-        tags,
-      })
-      .select()
-      .single()
-
-    if (bugError) {
-      throw bugError
-    }
-
-    // Record the activity
-    const { error: activityError } = await supabase.from("bug_activity").insert({
-      bug_id: bug.id,
-      user_id: session.user.id,
-      action: "created",
-      details: "this bug",
+        stepsToReproduce: steps_to_reproduce || null,
+        projectId: project_id,
+        status: "OPEN",
+        priority: priority || "MEDIUM",
+        severity: severity || "MINOR",
+        reporterId: session.user.id,
+        assigneeId: assignee_id || null,
+        tags: tags || [],
+      },
     })
 
-    if (activityError) {
-      throw activityError
-    }
+    // Record the activity
+    await prisma.bugActivity.create({
+      data: {
+        bugId: bug.id,
+        userId: session.user.id,
+        action: "created",
+        details: "this bug",
+      },
+    })
 
     return NextResponse.json({ bug })
   } catch (error) {
